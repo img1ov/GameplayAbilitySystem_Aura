@@ -5,7 +5,7 @@
 
 #include "EnhancedInputSubsystems.h"
 #include "EnhancedInputComponent.h"
-#include "Interaction/EnemyInterface.h"
+#include "Character/AuraEnemy.h"
 
 AAuraPlayerController::AAuraPlayerController()
 {
@@ -25,9 +25,10 @@ void AAuraPlayerController::BeginPlay()
 
 	check(AuraContext);
 	
-	UEnhancedInputLocalPlayerSubsystem* SubSystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer());
-	check(SubSystem);
-	SubSystem->AddMappingContext(AuraContext, 0);
+	if(UEnhancedInputLocalPlayerSubsystem* SubSystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
+	{
+		SubSystem->AddMappingContext(AuraContext, 0);
+	}
 
 	bShowMouseCursor = true;
 	DefaultMouseCursor = EMouseCursor::Default;
@@ -72,9 +73,9 @@ void AAuraPlayerController::CursorTrace()
 	{
 		return;
 	}
-
+	
 	LastActor = ThisActor;
-	ThisActor = Cast<IEnemyInterface>(CursorHit.GetActor());
+	ThisActor = Cast<AAuraEnemy>(CursorHit.GetActor());
 
 	/**
 	 * Line trace from cursor, There are several scenarios:
