@@ -17,6 +17,70 @@ GAMEPLAYATTRIBUTE_VALUE_INITTER(PropertyName)
 /** End 快捷定义属性访问器*/
 
 /**
+ * 在PostGameplayEffectExecute时存储Effect数据
+ */
+USTRUCT(BlueprintType)
+struct FEffectProperties
+{
+	GENERATED_BODY()
+
+	FEffectProperties(){}
+	
+	FEffectProperties(
+		const FGameplayEffectContextHandle& InEffectContextHandle,
+		
+		UAbilitySystemComponent* InSourceASC,
+		AActor* InSourceAvatarActor,
+		AController* InSourceController,
+		ACharacter* InSourceCharacter,
+
+		UAbilitySystemComponent* InTargetASC,
+		AActor* InTargetAvatarActor,
+		AController* InTargetController,
+		ACharacter* InTargetCharacter
+		) :
+	EffectContextHandle(InEffectContextHandle),
+	
+	SourceASC(InSourceASC),
+	SourceAvatarActor(InSourceAvatarActor),
+	SourceController(InSourceController),
+	SourceCharacter(InSourceCharacter),
+	
+	TargetASC(InTargetASC),
+	TargetAvatarActor(InTargetAvatarActor),
+	TargetController(InTargetController),
+	TargetCharacter(InTargetCharacter)
+	{}
+
+	FGameplayEffectContextHandle EffectContextHandle;
+	
+	UPROPERTY()
+	UAbilitySystemComponent* SourceASC;
+
+	UPROPERTY()
+	AActor* SourceAvatarActor = nullptr;
+
+	UPROPERTY()
+	AController* SourceController = nullptr;
+
+	UPROPERTY()
+	ACharacter* SourceCharacter = nullptr;
+
+	
+	UPROPERTY()
+	UAbilitySystemComponent* TargetASC = nullptr;
+
+	UPROPERTY()
+	AActor* TargetAvatarActor = nullptr;
+
+	UPROPERTY()
+	AController* TargetController = nullptr;
+
+	UPROPERTY()
+	ACharacter* TargetCharacter = nullptr;
+};
+
+/**
  * 
  */
 UCLASS()
@@ -57,4 +121,11 @@ public:
 
 	UFUNCTION()
 	void OnRep_MaxMana(const FGameplayAttributeData& OldMaxMana) const;
+	
+	virtual void PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue) override;
+	
+	virtual void PostGameplayEffectExecute(const struct FGameplayEffectModCallbackData& Data) override;
+
+private:
+	void SetEffectProperties(const FGameplayEffectModCallbackData& Data, FEffectProperties& InEffectProperties);
 };

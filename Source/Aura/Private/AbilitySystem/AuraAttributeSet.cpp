@@ -2,6 +2,9 @@
 
 
 #include "AbilitySystem/AuraAttributeSet.h"
+
+#include "GameFramework/Character.h"
+#include "GameplayEffectExtension.h"
 #include "Net/UnrealNetwork.h"
 
 UAuraAttributeSet::UAuraAttributeSet()
@@ -44,4 +47,98 @@ void UAuraAttributeSet::OnRep_Mana(const FGameplayAttributeData& OldMana) const
 void UAuraAttributeSet::OnRep_MaxMana(const FGameplayAttributeData& OldMaxMana) const
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UAuraAttributeSet, MaxMana, OldMaxMana);
+}
+
+void UAuraAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue)
+{
+	Super::PreAttributeChange(Attribute, NewValue);
+
+	if (Attribute == GetHealthAttribute())
+	{
+		NewValue = FMath::Clamp(NewValue, 0, GetMaxHealth());
+	}
+
+	if (Attribute == GetManaAttribute())
+	{
+		NewValue = FMath::Clamp(NewValue, 0, GetMaxMana());
+	}
+	
+}
+
+
+void UAuraAttributeSet::PostGameplayEffectExecute(const struct FGameplayEffectModCallbackData& Data)
+{
+	Super::PostGameplayEffectExecute(Data);
+
+	FEffectProperties EffectProperties;
+	SetEffectProperties(Data, EffectProperties);
+
+	if (Data.EvaluatedData.Attribute == GetHealthAttribute())
+	{
+		SetHealth(FMath::Clamp(GetHealth(), 0, GetMaxHealth()));
+	}
+
+	if (Data.EvaluatedData.Attribute == GetManaAttribute())
+	{
+		SetMana(FMath::Clamp(GetMana(), 0, GetMaxMana()));
+	}
+}
+
+void UAuraAttributeSet::SetEffectProperties(const FGameplayEffectModCallbackData& Data, FEffectProperties& InEffectProperties)
+{
+	//Source Properties
+	FGameplayEffectContextHandle EffectContextHandle = Data.EffectSpec.GetContext();
+	UAbilitySystemComponent* SourceASC = EffectContextHandle.GetOriginalInstigatorAbilitySystemComponent();
+
+	InEffectProperties.EffectContextHandle = EffectContextHandle;
+	InEffectProperties.SourceASC = SourceASC;
+	
+	if (IsValid(SourceASC) && SourceASC->AbilityActorInfo.IsValid() && SourceASC->AbilityActorInfo->AvatarActor.IsValid())
+	{
+		AActor* SourceAvatarActor = SourceASC->GetAvatarActor();
+		AController* SourceController = SourceASC->AbilityActorInfo->PlayerController.Get();
+
+		//当ASC在PlayerState上时，PlayerState没有Controller引用，此时需要去AvatarActor里获取
+		if (SourceAvatarActor && !SourceController)
+		{
+			if (const APawn* SourcePawn = Cast<APawn>(SourceAvatarActor))
+			{
+				SourceController = SourcePawn->GetController();
+			}
+		}
+
+		InEffectProperties.SourceAvatarActor = SourceAvatarActor;
+		InEffectProperties.SourceController = SourceController;
+		
+		if (SourceController)
+		{
+			InEffectProperties.SourceCharacter = Cast<ACharacter>(SourceController->GetPawn());
+		}
+	}
+
+	//TargetProperties
+	UAbilitySystemComponent& TargetASCRef = Data.Target;
+	
+	if (TargetASCRef.AbilityActorInfo.IsValid() && Data.Target.AbilityActorInfo->AvatarActor.IsValid())
+	{
+		AActor* TargetAvatarActor = TargetASCRef.GetAvatarActor();
+		AController* TargetController = TargetASCRef.AbilityActorInfo->PlayerController.Get();
+
+		if (TargetAvatarActor && !TargetController)
+		{
+			if (const APawn* TargetPawn = Cast<APawn>(TargetAvatarActor))
+			{
+				TargetController = TargetPawn->GetController();
+			}
+		}
+
+		InEffectProperties.TargetASC = TargetASCRef.AbilityActorInfo->AbilitySystemComponent.Get();
+		InEffectProperties.TargetAvatarActor = TargetAvatarActor;
+		InEffectProperties.TargetController = TargetController;
+
+		if (TargetController)
+		{
+			InEffectProperties.TargetCharacter = Cast<ACharacter>(TargetController->GetPawn());
+		}
+	}
 }
