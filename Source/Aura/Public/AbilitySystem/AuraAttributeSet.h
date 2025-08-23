@@ -8,6 +8,11 @@
 
 #include "AuraAttributeSet.generated.h"
 
+//typedef is specific to the FGameplayAttribute() signature, but TStaticFuncPtr is generic to any signature chosen.
+//typedef TBaseStaticDelegateInstance<FGameplayAttribute(), FDefaultDelegateUserPolicy>::FFuncPtr FAttributeFunPtr;
+template<class T>
+using TStaticFuncPtr = typename TBaseStaticDelegateInstance<T, FDefaultDelegateUserPolicy>::FFuncPtr;
+
 /** 快捷定义属性访问器 */
 #define ATTRIBUTE_ACCESSORS(ClassName, PropertyName) \
 GAMEPLAYATTRIBUTE_PROPERTY_GETTER(ClassName, PropertyName) \
@@ -89,6 +94,8 @@ class AURA_API UAuraAttributeSet : public UAttributeSet
 	GENERATED_BODY()
 	
 public:
+	TMap<FGameplayTag, TStaticFuncPtr<FGameplayAttribute()>> TagsToAttributeMap; // TStaticFuncPtr<FGameplayAttribute()> = FGameplayAttribute(*)();
+	
 	/**
 	 * Primary Attributes
 	 */

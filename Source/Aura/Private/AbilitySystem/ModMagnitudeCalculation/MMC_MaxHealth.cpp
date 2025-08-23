@@ -12,7 +12,7 @@ UMMC_MaxHealth::UMMC_MaxHealth()
 	VigorCaptureDef.AttributeSource = EGameplayEffectAttributeCaptureSource::Target;
 	VigorCaptureDef.bSnapshot = false;
 
-	//在Spec构造时捕获
+	//在Spec构造时捕获, 捕获在GESpec构造时的参数，以该参数为权威做计算，防止后续因为外部因素导致该Attribute被更改
 	RelevantAttributesToCapture.Add(VigorCaptureDef);
 }
 

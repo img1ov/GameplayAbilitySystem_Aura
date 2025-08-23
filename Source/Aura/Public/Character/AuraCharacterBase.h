@@ -8,6 +8,7 @@
 #include "Interaction/CombatInterface.h"
 #include "AuraCharacterBase.generated.h"
 
+class UGameplayAbility;
 class UGameplayEffect;
 class UAbilitySystemComponent;
 class UAttributeSet;
@@ -16,9 +17,6 @@ UCLASS()
 class AURA_API AAuraCharacterBase : public ACharacter, public IAbilitySystemInterface, public ICombatInterface
 {
 	GENERATED_BODY()
-
-public:
-	AAuraCharacterBase();
 
 protected:
 	UPROPERTY(EditAnywhere, Category="Combat")
@@ -39,7 +37,13 @@ protected:
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category="DefaultAttributes")
 	TSubclassOf<UGameplayEffect> DefaultVitalAttributes;
 
+private:
+	UPROPERTY(EditAnywhere, Category="Abilities")
+	TArray<TSubclassOf<UGameplayAbility>> StartUpAbilites;
+	
 public:
+	AAuraCharacterBase();
+	
 	UAttributeSet* GetAttributeSet() const { return AttributeSet; }
 	
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
@@ -50,4 +54,6 @@ protected:
 	virtual void InitAbilityActorInfo();
 	void ApplyEffectSpecToSelf(TSubclassOf<UGameplayEffect> GameplayEffectClass, float Level) const;
 	void InitializeDefaultAttributes() const;
+
+	void AddCharacterAbilities();
 };

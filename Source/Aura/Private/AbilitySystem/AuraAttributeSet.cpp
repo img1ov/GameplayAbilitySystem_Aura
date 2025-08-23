@@ -6,10 +6,29 @@
 #include "GameFramework/Character.h"
 #include "GameplayEffectExtension.h"
 #include "Net/UnrealNetwork.h"
+#include "GameplayTags/AuraGameplayTags.h"
 
 UAuraAttributeSet::UAuraAttributeSet()
 {
+	//Primary Attributes
 	
+	TagsToAttributeMap.Add(Attributes_Primary_Intelligence, GetIntelligenceAttribute);
+	TagsToAttributeMap.Add(Attributes_Primary_Resilience, GetResilienceAttribute);
+	TagsToAttributeMap.Add(Attributes_Primary_Strength, GetStrengthAttribute);
+	TagsToAttributeMap.Add(Attributes_Primary_Vigor, GetVigorAttribute);
+
+	//Secondary Attributes
+	
+	TagsToAttributeMap.Add(Attributes_Secondary_Armor, GetArmorAttribute);
+	TagsToAttributeMap.Add(Attributes_Secondary_ArmorPenetration, GetArmorPenetrationAttribute);
+	TagsToAttributeMap.Add(Attributes_Secondary_BlockChance, GetBlockChanceAttribute);
+	TagsToAttributeMap.Add(Attributes_Secondary_CriticalChance, GetCriticalChanceAttribute);
+	TagsToAttributeMap.Add(Attributes_Secondary_CriticalHitDamage, GetCriticalHitDamageAttribute);
+	TagsToAttributeMap.Add(Attributes_Secondary_CriticalHitResistance, GetCriticalHitResistanceAttribute);
+	TagsToAttributeMap.Add(Attributes_Secondary_HealthRegeneration, GetHealthRegenerationAttribute);
+	TagsToAttributeMap.Add(Attributes_Secondary_ManaRegeneration, GetManaRegenerationAttribute);
+	TagsToAttributeMap.Add(Attributes_Secondary_MaxHealth, GetMaxHealthAttribute);
+	TagsToAttributeMap.Add(Attributes_Secondary_MaxMana, GetMaxManaAttribute);
 }
 
 void UAuraAttributeSet::GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const

@@ -3,13 +3,22 @@
 
 #include "Player/AuraPlayerController.h"
 
+#include "AbilitySystemBlueprintLibrary.h"
 #include "EnhancedInputSubsystems.h"
-#include "EnhancedInputComponent.h"
 #include "Character/AuraEnemy.h"
+#include "GameplayTagContainer.h"
+#include "NavigationPath.h"
+#include "NavigationSystem.h"
+#include "AbilitySystem/AuraAbilitySystemComponent.h"
+#include "Components/SplineComponent.h"
+#include "Input/AuraInputComponent.h"
+#include "Gameplaytags/AuraGameplayTags.h"
 
 AAuraPlayerController::AAuraPlayerController()
 {
 	bReplicates = true;
+
+	Spline = CreateDefaultSubobject<USplineComponent>("Spline");
 }
 
 void AAuraPlayerController::PlayerTick(float DeltaTime)
@@ -17,17 +26,18 @@ void AAuraPlayerController::PlayerTick(float DeltaTime)
 	Super::PlayerTick(DeltaTime);
 
 	CursorTrace();
+	AutoRun();
 }
 
 void AAuraPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
 
-	check(AuraContext);
+	check(AuraInputMappingContext);
 	
 	if(UEnhancedInputLocalPlayerSubsystem* SubSystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
 	{
-		SubSystem->AddMappingContext(AuraContext, 0);
+		SubSystem->AddMappingContext(AuraInputMappingContext, 0);
 	}
 
 	bShowMouseCursor = true;
@@ -43,10 +53,23 @@ void AAuraPlayerController::SetupInputComponent()
 {
 	Super::SetupInputComponent();
 
-	UEnhancedInputComponent* EnhancedInputComponent = CastChecked<UEnhancedInputComponent>(InputComponent);
-	check(EnhancedInputComponent);
+	UAuraInputComponent* AuraInputComponent = CastChecked<UAuraInputComponent>(InputComponent);
+	check(AuraInputComponent);
+	check(InputConfig);
 
-	EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AAuraPlayerController::Move);
+	AuraInputComponent->BindInputActions(InputConfig, this, &ThisClass::AbilityInputTagPressed, &ThisClass::AbilityInputTagReleased, &ThisClass::AbilityInputTagHeld);
+	AuraInputComponent->BindAction(MoveInputAction, ETriggerEvent::Triggered, this, &AAuraPlayerController::Move);
+}
+
+UAuraAbilitySystemComponent* AAuraPlayerController::GetAuraGameplayAbilitySystem()
+{
+	if (!AuraAbilitySystemComponent)
+	{
+		AuraAbilitySystemComponent =
+			Cast<UAuraAbilitySystemComponent>(UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(GetPawn<APawn>()));
+	}
+
+	return AuraAbilitySystemComponent;
 }
 
 void AAuraPlayerController::Move(const FInputActionValue& InputActionValue)
@@ -60,14 +83,38 @@ void AAuraPlayerController::Move(const FInputActionValue& InputActionValue)
 	
 	if( APawn* ControlPawn = GetPawn<APawn>() )
 	{
+		bAutoRunning = false;
 		ControlPawn->AddMovementInput(ForwardDirection, InputAxisVector.Y);
 		ControlPawn->AddMovementInput(RightDirection, InputAxisVector.X);
 	}
 }
 
+void AAuraPlayerController::AutoRun()
+{
+	if (bAutoRunning)
+	{
+		if (APawn* ControlledPawn = GetPawn())
+		{
+			//从平滑后的导航路径中获取离自身最近的点
+			const FVector LocationOnSpline = Spline->FindLocationClosestToWorldLocation(ControlledPawn->GetActorLocation(), ESplineCoordinateSpace::World);
+			//获取导航方向
+			const FVector NavDirection = Spline->FindDirectionClosestToWorldLocation(LocationOnSpline, ESplineCoordinateSpace::World);
+			//向目标点移动，CharacterMovementComponent::AddMovementInput拥有网络预测与同步，该做法能让玩家为Client时能够将自身移动任务同步到服务器，
+			//玩家为Client时果使用AI导航那套东西，那套本身就是跑在服务器上的，本身不支持网络预测和服务器同步，所以移动可能会失效
+			ControlledPawn->AddMovementInput(NavDirection);
+
+			//目标点在自身AutoRunAcceptanceRadius内时停止移动
+			const float DistanceToDestination = (LocationOnSpline - CachedDestination).Length();
+			if (DistanceToDestination <= AutoRunAcceptanceRadius)
+			{
+				bAutoRunning = false;
+			}
+		}
+	}
+}
+
 void AAuraPlayerController::CursorTrace()
 {
-	FHitResult CursorHit;
 	GetHitResultUnderCursor(ECC_Visibility, false, CursorHit);
 	if (!CursorHit.bBlockingHit)
 	{
@@ -91,31 +138,115 @@ void AAuraPlayerController::CursorTrace()
 	 *		-Do nothing 
 	 */
 
-	if (LastActor == nullptr)
+	if (ThisActor != LastActor)
 	{
-		if (ThisActor != nullptr)
+		if (LastActor)
 		{
-			//B
+			LastActor->UnHighlightActor();	
+		}
+		
+		if (ThisActor)
+		{
 			ThisActor->HighLightActor();
-		}
-		//A
-	}
-	else
-	{
-		if (ThisActor == nullptr)
-		{
-			//C
-			LastActor->UnHighlightActor();
-		}
-		else
-		{
-			if (LastActor != ThisActor)
-			{
-				//D
-				LastActor->UnHighlightActor();
-				ThisActor->HighLightActor();
-			}
-			//E
 		}
 	}
 }
+
+void AAuraPlayerController::AbilityInputTagPressed(FGameplayTag InputTag)
+{
+	//点击寻路
+	if (InputTag.MatchesTagExact(InputTag_LMB))
+	{
+		bTargeting = ThisActor != nullptr;
+		bAutoRunning = false;
+	}
+}
+
+void AAuraPlayerController::AbilityInputTagReleased(FGameplayTag InputTag)
+{
+	if (!InputTag.MatchesTagExact(InputTag_LMB))
+	{
+		if (UAuraAbilitySystemComponent* AuraASC = GetAuraGameplayAbilitySystem())
+		{
+			AuraASC->AbilityInputTagReleased(InputTag);
+		}
+
+		return;
+	}
+	
+	if (bTargeting)
+	{
+		if (UAuraAbilitySystemComponent* AuraASC = GetAuraGameplayAbilitySystem())
+		{
+			AuraASC->AbilityInputTagReleased(InputTag);
+		}
+	}
+	else
+	{
+		//点击左键时 计算寻路路径, 寻路时需要在编辑器中添加Volume/NavMeshBoundsVolume去烘培场景
+		//在Cline中使用NavSystem计算路径前需要在ProjectSettings中开启NavigationSystem/AllowClientSideNavigation
+		//如果目标点不在NavMesh烘培范围内，也就鼠标击了某个建筑Collision，则会计算出不合法的路径点导致角色一直朝错误的路径点移动，此时需要在建筑Collision中将Trace Responses的Visibility设置为Ignore
+		APawn* ControlledPawn = GetPawn();
+		if (FollowTime <= ShortPressThreshold && ControlledPawn)
+		{
+			if (UNavigationPath* NavigationPath = UNavigationSystemV1::FindPathToLocationSynchronously(this, ControlledPawn->GetActorLocation(), CachedDestination))
+			{
+				//生成寻路路径后使用Spline平滑
+				Spline->ClearSplinePoints();
+				for (const FVector& PathPoint : NavigationPath->PathPoints)
+				{
+					Spline->AddSplinePoint(PathPoint, ESplineCoordinateSpace::World);
+				}
+				//为了防止鼠标点击位置CachedDestination不合法，将他重置为导航路径终点
+				if (NavigationPath->PathPoints.Num() > 0)
+				{
+					CachedDestination = NavigationPath->PathPoints[NavigationPath->PathPoints.Num() -1];
+				}
+				bAutoRunning = true;
+			}
+		}
+	}
+
+	FollowTime = 0.f;
+	bTargeting = false;
+}
+
+void AAuraPlayerController::AbilityInputTagHeld(FGameplayTag InputTag)
+{
+	if (!InputTag.MatchesTagExact(InputTag_LMB))
+	{
+		if (UAuraAbilitySystemComponent* AuraASC = GetAuraGameplayAbilitySystem())
+		{
+			AuraASC->AbilityInputTagHeld(InputTag);
+		}
+
+		return;
+	}
+
+	//有敌人时按住左键放技能，没有则移动导航
+	if (bTargeting)
+	{
+		if (UAuraAbilitySystemComponent* AuraASC = GetAuraGameplayAbilitySystem())
+		{
+			AuraASC->AbilityInputTagHeld(InputTag);
+		}
+	}
+	else
+	{
+		FollowTime += GetWorld()->GetDeltaSeconds();
+
+		//获取导航目标点
+		if (CursorHit.bBlockingHit)
+		{
+			//缓存导航点
+			CachedDestination = CursorHit.ImpactPoint;
+		}
+
+		if (APawn* ControlPawn = GetPawn())
+		{
+			const FVector WorldDirection = (CachedDestination - ControlPawn->GetActorLocation()).GetSafeNormal();
+			ControlPawn->AddMovementInput(WorldDirection);
+		}
+	}
+}
+
